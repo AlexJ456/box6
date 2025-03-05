@@ -40,35 +40,47 @@ document.addEventListener('DOMContentLoaded', () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
 
-  function playTone() {
-    if (state.soundEnabled) {
-      // Create audio context on demand (needed for iOS)
-      if (!window.audioContext) {
-        window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  // Audio context management
+  let audioContext = null;
+
+  function initAudioContext() {
+    if (!audioContext) {
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (e) {
+        console.error("Web Audio API not supported:", e);
       }
-      
-      // iOS requires user interaction to start audio context
-      if (window.audioContext.state === 'suspended') {
-        window.audioContext.resume();
-      }
-      
-      const oscillator = window.audioContext.createOscillator();
-      const gainNode = window.audioContext.createGain();
-      
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(440, window.audioContext.currentTime); // 440 Hz is A4
-      
-      // Add fade in/out to avoid clicks
-      gainNode.gain.setValueAtTime(0, window.audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(0.5, window.audioContext.currentTime + 0.01);
-      gainNode.gain.linearRampToValueAtTime(0, window.audioContext.currentTime + 0.1);
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(window.audioContext.destination);
-      
-      oscillator.start();
-      oscillator.stop(window.audioContext.currentTime + 0.1); // Play for 0.1 seconds
     }
+    return audioContext;
+  }
+
+  function playTone() {
+    if (!state.soundEnabled) return;
+    
+    const context = initAudioContext();
+    if (!context) return;
+    
+    // Resume context if suspended (needed for iOS)
+    if (context.state === 'suspended') {
+      context.resume();
+    }
+    
+    const oscillator = context.createOscillator();
+    const gainNode = context.createGain();
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(440, context.currentTime);
+    
+    // Add fade in/out to avoid clicks
+    gainNode.gain.setValueAtTime(0, context.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.5, context.currentTime + 0.01);
+    gainNode.gain.linearRampToValueAtTime(0, context.currentTime + 0.1);
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(context.destination);
+    
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.1);
   }
 
   // Interval reference
@@ -98,6 +110,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // Event handlers
   function togglePlay() {
     state.isPlaying = !state.isPlaying;
+    
+    // Initialize audio context on user interaction
+    if (state.soundEnabled) {
+      const context = initAudioContext();
+      if (context && context.state === 'suspended') {
+        context.resume();
+      }
+    }
+    
     if (state.isPlaying) {
       state.totalTime = 0;
       state.countdown = 4;
@@ -125,8 +146,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function toggleSound() {
     state.soundEnabled = !state.soundEnabled;
+    
+    // Initialize audio context on user interaction
+    if (state.soundEnabled) {
+      const context = initAudioContext();
+      if (context && context.state === 'suspended') {
+        context.resume();
+      }
+      // Play a silent tone to unlock audio on iOS
+      playTestTone();
+    }
+    
     saveState();
     render();
+  }
+  
+  // Function to play a silent tone to unlock audio on iOS
+  function playTestTone() {
+    const context = initAudioContext();
+    if (!context) return;
+    
+    if (context.state === 'suspended') {
+      context.resume();
+    }
+    
+    const oscillator = context.createOscillator();
+    const gainNode = context.createGain();
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(440, context.currentTime);
+    
+    // Make it silent
+    gainNode.gain.setValueAtTime(0.001, context.currentTime);
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(context.destination);
+    
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.01);
   }
 
   function handleTimeLimitChange(e) {
@@ -138,6 +195,17 @@ document.addEventListener('DOMContentLoaded', () => {
   function startWithPreset(minutes) {
     state.timeLimit = minutes.toString();
     saveState();
+    
+    // Initialize audio context on user interaction
+    if (state.soundEnabled) {
+      const context = initAudioContext();
+      if (context && context.state === 'suspended') {
+        context.resume();
+      }
+      // Play a silent tone to unlock audio on iOS
+      playTestTone();
+    }
+    
     state.isPlaying = true;
     state.totalTime = 0;
     state.countdown = 4;
@@ -153,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
     interval = setInterval(() => {
       // Increment total time
       state.totalTime += 1;
-      
+
       // Check if time limit has been reached
       if (state.timeLimit && !state.timeLimitReached) {
         const timeLimitSeconds = parseInt(state.timeLimit) * 60;
@@ -161,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
           state.timeLimitReached = true;
         }
       }
-      
+
       // Handle countdown and phase changes
       if (state.countdown <= 1) {
         // We're about to change phases
@@ -178,7 +246,6 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         state.countdown -= 1;
       }
-      
       render();
     }, 1000);
   }
@@ -186,13 +253,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Render function
   function render() {
     let html = `<h1>Box Breathing</h1>`;
-    
+
     if (state.isPlaying) {
       html += `<div class="timer">Total Time: ${formatTime(state.totalTime)}</div>`;
       html += `<div class="instruction">${getInstruction(state.count)}</div>`;
       html += `<div class="countdown">${state.countdown}</div>`;
     }
-    
+
     if (!state.isPlaying && !state.sessionComplete) {
       html += `<div class="settings">
         <div class="form-group">
@@ -207,22 +274,21 @@ document.addEventListener('DOMContentLoaded', () => {
           <label for="time-limit">Minutes (optional)</label>
         </div>
       </div>`;
-      
       html += `<div class="prompt">Press start to begin</div>`;
     }
-    
+
     if (state.sessionComplete) {
       html += `<div class="complete">Complete!</div>`;
     }
-    
+
     if (!state.sessionComplete) {
       html += `<button id="toggle-play">${state.isPlaying ? icons.pause : icons.play} ${state.isPlaying ? 'Pause' : 'Start'}</button>`;
     }
-    
+
     if (state.sessionComplete) {
       html += `<button id="reset">${icons.rotateCcw} Start Again</button>`;
     }
-    
+
     if (!state.isPlaying && !state.sessionComplete) {
       html += `<div class="shortcut-buttons">
         <button class="preset-button" data-minutes="2">${icons.clock} 2 min</button>
@@ -230,18 +296,18 @@ document.addEventListener('DOMContentLoaded', () => {
         <button class="preset-button" data-minutes="10">${icons.clock} 10 min</button>
       </div>`;
     }
-    
+
     app.innerHTML = html;
-    
+
     // Add event listeners
     if (!state.sessionComplete) {
       document.getElementById('toggle-play').addEventListener('click', togglePlay);
     }
-    
+
     if (state.sessionComplete) {
       document.getElementById('reset').addEventListener('click', resetToStart);
     }
-    
+
     if (!state.isPlaying && !state.sessionComplete) {
       document.getElementById('sound-toggle').addEventListener('change', toggleSound);
       document.getElementById('time-limit').addEventListener('input', handleTimeLimitChange);
@@ -254,4 +320,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initial load
   loadState();
   render();
+  
+  // Add touch event listener to the document to initialize audio context
+  document.addEventListener('touchstart', function() {
+    if (state.soundEnabled) {
+      const context = initAudioContext();
+      if (context && context.state === 'suspended') {
+        context.resume();
+      }
+    }
+  }, {once: true});
 });
