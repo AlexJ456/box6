@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   const app = document.getElementById('app');
-  
+
   // App state
   const state = {
     isPlaying: false,
@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     sessionComplete: false,
     timeLimitReached: false
   };
-  
+
   // SVG Icons
   const icons = {
     play: `<svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`,
@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     rotateCcw: `<svg class="icon" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>`,
     clock: `<svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`
   };
-  
+
   // Helper functions
   function getInstruction(count) {
     switch (count) {
@@ -33,13 +33,13 @@ document.addEventListener('DOMContentLoaded', () => {
       default: return "";
     }
   }
-  
+
   function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
-  
+
   function playTone() {
     if (state.soundEnabled) {
       // Create audio context on demand (needed for iOS)
@@ -70,10 +70,10 @@ document.addEventListener('DOMContentLoaded', () => {
       oscillator.stop(window.audioContext.currentTime + 0.1); // Play for 0.1 seconds
     }
   }
-  
+
   // Interval reference
   let interval;
-  
+
   // Load saved state from localStorage
   function loadState() {
     const savedState = localStorage.getItem('boxBreathingState');
@@ -81,10 +81,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const parsedState = JSON.parse(savedState);
       // Only restore certain properties
       state.soundEnabled = parsedState.soundEnabled || false;
-      state.timeLimit = parsedState.timeLimit || '';
+      state.timeLimit = parsedState.timeLimit;
     }
   }
-  
+
   // Save state to localStorage
   function saveState() {
     // Only save certain properties
@@ -94,11 +94,10 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     localStorage.setItem('boxBreathingState', JSON.stringify(stateToSave));
   }
-  
+
   // Event handlers
   function togglePlay() {
     state.isPlaying = !state.isPlaying;
-    
     if (state.isPlaying) {
       state.totalTime = 0;
       state.countdown = 4;
@@ -109,10 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       clearInterval(interval);
     }
-    
     render();
   }
-  
+
   function resetToStart() {
     state.isPlaying = false;
     state.totalTime = 0;
@@ -124,19 +122,19 @@ document.addEventListener('DOMContentLoaded', () => {
     clearInterval(interval);
     render();
   }
-  
+
   function toggleSound() {
     state.soundEnabled = !state.soundEnabled;
     saveState();
     render();
   }
-  
+
   function handleTimeLimitChange(e) {
     // Update state but don't re-render
     state.timeLimit = e.target.value.replace(/[^0-9]/g, '');
     saveState();
   }
-  
+
   function startWithPreset(minutes) {
     state.timeLimit = minutes.toString();
     saveState();
@@ -149,10 +147,9 @@ document.addEventListener('DOMContentLoaded', () => {
     startInterval();
     render();
   }
-  
+
   function startInterval() {
     clearInterval(interval);
-    
     interval = setInterval(() => {
       // Increment total time
       state.totalTime += 1;
@@ -185,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
       render();
     }, 1000);
   }
-  
+
   // Render function
   function render() {
     let html = `<h1>Box Breathing</h1>`;
@@ -248,17 +245,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!state.isPlaying && !state.sessionComplete) {
       document.getElementById('sound-toggle').addEventListener('change', toggleSound);
       document.getElementById('time-limit').addEventListener('input', handleTimeLimitChange);
-      
       document.querySelectorAll('.preset-button').forEach(button => {
-        button.addEventListener('click', () => {
-          startWithPreset(button.dataset.minutes);
-        });
+        button.addEventListener('click', () => startWithPreset(button.dataset.minutes));
       });
     }
   }
-  
+
   // Initial load
   loadState();
   render();
 });
-
