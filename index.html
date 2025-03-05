@@ -259,26 +259,6 @@
           });
       });
     }
-
-// Add iOS installation tip
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-
-if (isIOS && !isInStandaloneMode && !localStorage.getItem('iosInstallTipShown')) {
-  // Show iOS installation tip
-  const iosInstallTip = document.createElement('div');
-  iosInstallTip.classList.add('ios-install-tip');
-  iosInstallTip.innerHTML = `
-    <div class="tip-content">
-      <p>Install this app on your iPhone: tap <strong>Share</strong> <span class="share-icon"></span> then <strong>Add to Home Screen</strong> <span class="home-icon"></span></p>
-      <button class="close-tip">Got it</button>
-    </div>
-  `;
-  document.body.appendChild(iosInstallTip);
-  
-  document.querySelector('.close-tip').addEventListener('click', () => {
-    iosInstallTip.style.display = 'none';
-    // Save to localStorage to avoid showing again
-    localStorage.setItem('iosInstallTipShown', 'true');
-  });
-}
+  </script>
+</body>
+</html>
