@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   const app = document.getElementById('app');
-
+  
   // App state
   const state = {
     isPlaying: false,
@@ -12,7 +12,33 @@ document.addEventListener('DOMContentLoaded', () => {
     sessionComplete: false,
     timeLimitReached: false
   };
-
+  
+  // Load saved settings from localStorage
+  function loadSavedSettings() {
+    try {
+      const savedSettings = localStorage.getItem('boxBreathingSettings');
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        state.soundEnabled = settings.soundEnabled || false;
+        state.timeLimit = settings.timeLimit || '';
+      }
+    } catch (e) {
+      console.error('Error loading saved settings:', e);
+    }
+  }
+  
+  // Save settings to localStorage
+  function saveSettings() {
+    try {
+      localStorage.setItem('boxBreathingSettings', JSON.stringify({
+        soundEnabled: state.soundEnabled,
+        timeLimit: state.timeLimit
+      }));
+    } catch (e) {
+      console.error('Error saving settings:', e);
+    }
+  }
+  
   // SVG Icons
   const icons = {
     play: `<svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`,
@@ -22,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
     rotateCcw: `<svg class="icon" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>`,
     clock: `<svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`
   };
-
+  
   // Helper functions
   function getInstruction(count) {
     switch (count) {
@@ -33,71 +59,36 @@ document.addEventListener('DOMContentLoaded', () => {
       default: return "";
     }
   }
-
+  
   function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
-
+  
   function playTone() {
     if (state.soundEnabled) {
-      // Create audio context on demand (needed for iOS)
-      if (!window.audioContext) {
-        window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // 440 Hz is A4
+        oscillator.connect(audioContext.destination);
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.1); // Play for 0.1 seconds
+      } catch (e) {
+        console.error('Error playing tone:', e);
       }
-
-      // iOS requires user interaction to start audio context
-      if (window.audioContext.state === 'suspended') {
-        window.audioContext.resume();
-      }
-
-      const oscillator = window.audioContext.createOscillator();
-      const gainNode = window.audioContext.createGain();
-
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(440, window.audioContext.currentTime); // 440 Hz is A4
-
-      // Add fade in/out to avoid clicks
-      gainNode.gain.setValueAtTime(0, window.audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(0.5, window.audioContext.currentTime + 0.01);
-      gainNode.gain.linearRampToValueAtTime(0, window.audioContext.currentTime + 0.1);
-
-      oscillator.connect(gainNode);
-      gainNode.connect(window.audioContext.destination);
-
-      oscillator.start();
-      oscillator.stop(window.audioContext.currentTime + 0.1); // Play for 0.1 seconds
     }
   }
-
+  
   // Interval reference
   let interval;
-
-  // Load saved state from localStorage
-  function loadState() {
-    const savedState = localStorage.getItem('boxBreathingState');
-    if (savedState) {
-      const parsedState = JSON.parse(savedState);
-      // Only restore certain properties
-      state.soundEnabled = parsedState.soundEnabled || false;
-      state.timeLimit = parsedState.timeLimit;
-    }
-  }
-
-  // Save state to localStorage
-  function saveState() {
-    // Only save certain properties
-    const stateToSave = {
-      soundEnabled: state.soundEnabled,
-      timeLimit: state.timeLimit
-    };
-    localStorage.setItem('boxBreathingState', JSON.stringify(stateToSave));
-  }
-
+  
   // Event handlers
   function togglePlay() {
     state.isPlaying = !state.isPlaying;
+    
     if (state.isPlaying) {
       state.totalTime = 0;
       state.countdown = 4;
@@ -108,9 +99,10 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       clearInterval(interval);
     }
+    
     render();
   }
-
+  
   function resetToStart() {
     state.isPlaying = false;
     state.totalTime = 0;
@@ -122,38 +114,39 @@ document.addEventListener('DOMContentLoaded', () => {
     clearInterval(interval);
     render();
   }
-
+  
   function toggleSound() {
     state.soundEnabled = !state.soundEnabled;
-    saveState();
+    saveSettings();
     render();
   }
-
+  
   function handleTimeLimitChange(e) {
     // Update state but don't re-render
     state.timeLimit = e.target.value.replace(/[^0-9]/g, '');
-    saveState();
+    saveSettings();
   }
-
+  
   function startWithPreset(minutes) {
     state.timeLimit = minutes.toString();
-    saveState();
     state.isPlaying = true;
     state.totalTime = 0;
     state.countdown = 4;
     state.count = 0;
     state.sessionComplete = false;
     state.timeLimitReached = false;
+    saveSettings();
     startInterval();
     render();
   }
-
+  
   function startInterval() {
     clearInterval(interval);
+    
     interval = setInterval(() => {
       // Increment total time
       state.totalTime += 1;
-
+      
       // Check if time limit has been reached
       if (state.timeLimit && !state.timeLimitReached) {
         const timeLimitSeconds = parseInt(state.timeLimit) * 60;
@@ -161,103 +154,121 @@ document.addEventListener('DOMContentLoaded', () => {
           state.timeLimitReached = true;
         }
       }
-
+      
       // Handle countdown and phase changes
       if (state.countdown === 1) {
         // We're about to change phases
         state.count = (state.count + 1) % 4;
         playTone();
         state.countdown = 4;
-        
-        // If we just completed an exhale (moving from count 2 to count 3) and time limit is reached
-        if (state.count === 3 && state.timeLimitReached) {
-          state.sessionComplete = true;
-          state.isPlaying = false;
-          clearInterval(interval);
-        }
       } else {
         state.countdown -= 1;
       }
+      
+      // Check if session should end
+      if (state.timeLimitReached && state.count === 0 && state.countdown === 4) {
+        state.isPlaying = false;
+        state.sessionComplete = true;
+        clearInterval(interval);
+      }
+      
       render();
     }, 1000);
   }
-
-  // Render function
-  function render() {
-    let html = `<h1>Box Breathing</h1>`;
-
-    if (state.isPlaying) {
-      html += `<div class="timer">Total Time: ${formatTime(state.totalTime)}</div>`;
-      html += `<div class="instruction">${getInstruction(state.count)}</div>`;
-      html += `<div class="countdown">${state.countdown}</div>`;
-    }
-
-    if (!state.isPlaying && !state.sessionComplete) {
-      html += `<div class="settings">
-        <div class="form-group">
-          <label class="switch">
-            <input type="checkbox" id="sound-toggle" ${state.soundEnabled ? 'checked' : ''}>
-            <span class="slider"></span>
-          </label>
-          <label for="sound-toggle">${state.soundEnabled ? icons.volume2 : icons.volumeX} Sound ${state.soundEnabled ? 'On' : 'Off'}</label>
-        </div>
-        <div class="form-group">
-          <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Time limit (minutes)" value="${state.timeLimit}" id="time-limit">
-          <label for="time-limit">Minutes (optional)</label>
-        </div>
-      </div>`;
-      html += `<div class="prompt">Press start to begin</div>`;
-    }
-
-    if (state.sessionComplete) {
-      html += `<div class="complete">Complete!</div>`;
-    }
-
-    if (!state.sessionComplete) {
-      html += `<button id="toggle-play">${state.isPlaying ? icons.pause : icons.play} ${state.isPlaying ? 'Pause' : 'Start'}</button>`;
-    }
-
-    if (state.sessionComplete) {
-      html += `<button id="reset">${icons.rotateCcw} Start Again</button>`;
-    }
-
-    if (!state.isPlaying && !state.sessionComplete) {
-      html += `<div class="shortcut-buttons">
-        <button class="preset-button" data-minutes="2">${icons.clock} 2 min</button>
-        <button class="preset-button" data-minutes="5">${icons.clock} 5 min</button>
-        <button class="preset-button" data-minutes="10">${icons.clock} 10 min</button>
-      </div>`;
-    }
-
-    app.innerHTML = html;
-
-    // Add event listeners
-    if (!state.sessionComplete) {
-      document.getElementById('toggle-play').addEventListener('click', togglePlay);
-    }
-
-    if (state.sessionComplete) {
-      document.getElementById('reset').addEventListener('click', resetToStart);
-    }
-
-    if (!state.isPlaying && !state.sessionComplete) {
-      document.getElementById('sound-toggle').addEventListener('change', toggleSound);
-      document.getElementById('time-limit').addEventListener('input', handleTimeLimitChange);
-      document.querySelectorAll('.preset-button').forEach(button => {
-        button.addEventListener('click', () => startWithPreset(button.dataset.minutes));
-      });
+  
+  // Check for URL parameters for presets
+  function checkUrlParams() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const preset = urlParams.get('preset');
+    if (preset) {
+      startWithPreset(preset);
     }
   }
-
-  // Initial load
-  loadState();
-  render();
-
-  // Initialize audio context with user interaction
-  document.addEventListener('click', function initAudio() {
-    if (!window.audioContext) {
-      window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  
+  // Render function
+  function render() {
+    let content = '';
+    
+    if (state.isPlaying) {
+      // Playing state
+      content = `
+        <h1>Box Breathing</h1>
+        <div class="instruction">${getInstruction(state.count)}</div>
+        <div class="countdown">${state.countdown}</div>
+        <button id="pauseBtn">${icons.pause} Pause</button>
+        <div class="timer">${formatTime(state.totalTime)}</div>
+      `;
+    } else if (state.sessionComplete) {
+      // Session complete state
+      content = `
+        <h1>Box Breathing</h1>
+        <div class="complete">Session Complete!</div>
+        <div class="prompt">You completed ${formatTime(state.totalTime)} of box breathing</div>
+        <button id="resetBtn">${icons.rotateCcw} Start Again</button>
+        <div class="shortcut-buttons">
+          <button class="preset-button" id="preset2">2 Min</button>
+          <button class="preset-button" id="preset5">5 Min</button>
+          <button class="preset-button" id="preset10">10 Min</button>
+        </div>
+      `;
+    } else {
+      // Start state
+      content = `
+        <h1>Box Breathing</h1>
+        <div class="prompt">Ready to start box breathing?</div>
+        <div class="settings">
+          <div class="form-group">
+            <label for="timeLimit">${icons.clock} Time Limit (minutes):</label>
+            <input type="text" id="timeLimit" placeholder="Optional" value="${state.timeLimit}">
+          </div>
+          <div class="form-group">
+            <label for="soundToggle">
+              ${state.soundEnabled ? icons.volume2 : icons.volumeX} Sound:
+            </label>
+            <label class="switch">
+              <input type="checkbox" id="soundToggle" ${state.soundEnabled ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+        <button id="startBtn">${icons.play} Start</button>
+        <div class="shortcut-buttons">
+          <button class="preset-button" id="preset2">2 Min</button>
+          <button class="preset-button" id="preset5">5 Min</button>
+          <button class="preset-button" id="preset10">10 Min</button>
+        </div>
+      `;
     }
-    document.removeEventListener('click', initAudio);
-  }, { once: true });
+    
+    app.innerHTML = content;
+    
+    // Add event listeners
+    if (state.isPlaying) {
+      document.getElementById('pauseBtn').addEventListener('click', togglePlay);
+    } else if (state.sessionComplete) {
+      document.getElementById('resetBtn').addEventListener('click', resetToStart);
+      document.getElementById('preset2').addEventListener('click', () => startWithPreset(2));
+      document.getElementById('preset5').addEventListener('click', () => startWithPreset(5));
+      document.getElementById('preset10').addEventListener('click', () => startWithPreset(10));
+    } else {
+      document.getElementById('startBtn').addEventListener('click', togglePlay);
+      document.getElementById('soundToggle').addEventListener('change', toggleSound);
+      document.getElementById('timeLimit').addEventListener('input', handleTimeLimitChange);
+      document.getElementById('preset2').addEventListener('click', () => startWithPreset(2));
+      document.getElementById('preset5').addEventListener('click', () => startWithPreset(5));
+      document.getElementById('preset10').addEventListener('click', () => startWithPreset(10));
+    }
+  }
+  
+  // Initialize the app
+  loadSavedSettings();
+  render();
+  checkUrlParams();
+  
+  // Handle visibility change to pause when tab is hidden
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && state.isPlaying) {
+      togglePlay();
+    }
+  });
 });
